@@ -23,7 +23,7 @@
     --img-fade-duration: 220ms;
     --img-fade-ease: ease-out;
 
-    --paper: #fbfaf6;
+    --paper: #f7f1e3;
 
     /* Mis à jour en JS selon le format mm */
     --spread-aspect: 1.414;
@@ -296,18 +296,8 @@
     background: transparent;
     color: #333; /* contraste sur fond clair */
   }
-  button {
-    padding: 9px 22px;
-    border: 1px solid #c9d6e6; /* teinte légère adaptée au fond */
-    background: #fff;
-    cursor: pointer;
-    border-radius: 6px;
-    font-size: 0.95rem;
-    transition: transform 0.12s ease, box-shadow 0.12s ease;
-  }
-  button:not(:disabled):hover { box-shadow: 0 3px 8px rgba(0,0,0,0.1); transform: translateY(-1px); }
-  button:disabled { opacity: 0.4; cursor: default; }
 
+  /* Indicateur + Zoom */
   #indicator { min-width: 160px; text-align: center; color: #333; font-size: 0.9rem; }
 
   .zoom-control {
@@ -326,6 +316,20 @@
     text-align: right;
   }
 
+  /* Flèches latérales */
+  .side-arrow{
+    position:absolute;top:50%;transform:translateY(-50%);
+    width:60px;height:60px;border-radius:50%;
+    border:1px solid #c9d6e6;background:rgba(255,255,255,.9);
+    font-size:2rem;cursor:pointer;z-index:50;
+    box-shadow:0 4px 12px rgba(0,0,0,.2);transition:.2s;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .side-arrow:hover:not(:disabled){transform:translateY(-50%) scale(1.08);}
+  .side-arrow:disabled{opacity:.45;cursor:default;box-shadow:none;}
+  .left-arrow{left:20px;}
+  .right-arrow{right:20px;}
+
   @media (prefers-reduced-motion: reduce) {
     .flip, .flip-face, .lift-shadow, .page img, .page, .book { transition: none !important; }
   }
@@ -334,6 +338,10 @@
 <body>
 <div class="app">
   <div class="book-scene" aria-label="Lecteur de livre" id="scene">
+    <!-- Flèches latérales conservées -->
+    <button class="side-arrow left-arrow" id="sidePrev" aria-label="Page précédente">❮</button>
+    <button class="side-arrow right-arrow" id="sideNext" aria-label="Page suivante">❯</button>
+
     <div class="book-pedestal" id="pedestal">
       <div class="zoom-wrap" id="zoomWrap">
         <div class="book" role="region" aria-live="polite" id="book">
@@ -346,14 +354,14 @@
       </div>
     </div>
   </div>
-  <div class="controls">
-    <button id="prev" aria-label="Page précédente">← Précédent</button>
-    <span id="indicator" aria-live="polite"></span>
-    <button id="next" aria-label="Page suivante">Suivant →</button>
 
+  <!-- Contrôles bas: seuls l’indicateur et le zoom sont conservés -->
+  <div class="controls">
+    <span id="indicator" aria-live="polite"></span>
     <div class="zoom-control" aria-label="Contrôle du zoom">
       <label for="zoomRange">Zoom</label>
-      <input id="zoomRange" type="range" min="0.6" max="2" step="0.05" value="1" aria-valuemin="0.6" aria-valuemax="2" aria-valuenow="1" aria-label="Zoom du livre">
+      <input id="zoomRange" type="range" min="0.6" max="2" step="0.05" value="1"
+             aria-valuemin="0.6" aria-valuemax="2" aria-valuenow="1" aria-label="Zoom du livre">
       <span class="zoom-value" id="zoomLabel">100%</span>
     </div>
   </div>
@@ -448,8 +456,6 @@ const views = buildViews(pageUrls);
    ============================================================ */
 const leftEl = document.getElementById("left");
 const rightEl = document.getElementById("right");
-const prevBtn = document.getElementById("prev");
-const nextBtn = document.getElementById("next");
 const indicator = document.getElementById("indicator");
 const bookEl = document.getElementById("book");
 const liftRight = document.getElementById("liftRight");
@@ -459,6 +465,8 @@ const scene = document.getElementById("scene");
 const zoomWrap = document.getElementById("zoomWrap");
 const zoomRange = document.getElementById("zoomRange");
 const zoomLabel = document.getElementById("zoomLabel");
+const sidePrev = document.getElementById("sidePrev");
+const sideNext = document.getElementById("sideNext");
 
 let viewIndex = 0;
 let isAnimating = false;
@@ -466,19 +474,12 @@ let isAnimating = false;
 /* ============================================================
    5) ADAPTATION DU LIVRE AU CONTENEUR + RELIURE
    ============================================================ */
-
-/* Calcule et applique dynamiquement l'épaisseur de la reliure en px
-   en fonction de la largeur du livre affiché, avec bornes min/max */
 function updateSpineWidth() {
   const bookRect = bookEl.getBoundingClientRect();
   if (!bookRect.width) return;
 
-  // Proportion de la largeur du livre: 1.8% (ajustable)
-  // Bornes pour éviter une reliure trop fine ou trop large
   const proportional = bookRect.width * 0.018; // 1.8% de la largeur
   const spinePx = Math.max(8, Math.min(36, proportional)); // 8px à 36px
-
-  // Applique la valeur dans la variable CSS
   document.documentElement.style.setProperty('--spine-width', spinePx.toFixed(1) + 'px');
 }
 
@@ -501,9 +502,7 @@ function fitBookToContainer() {
   bookEl.style.width = w + "px";
   bookEl.style.height = h + "px";
 
-  // Adapter la largeur de la reliure à la taille courante du livre
   updateSpineWidth();
-
   updatePanBoundsAndClamp();
   updatePannableState();
 }
@@ -555,13 +554,16 @@ function renderStatic() {
   clearPage(leftEl);
   clearPage(rightEl);
   applyCoverMode(view);
-  fitBookToContainer(); // inclut updateSpineWidth
+  fitBookToContainer();
 
   if (view.left)  leftEl.appendChild(imgElem(view.left, "Page gauche"));
   if (view.right) rightEl.appendChild(imgElem(view.right, "Page droite"));
+
   indicator.textContent = views.length ? `Vue ${viewIndex + 1} / ${views.length}` : "Aucune page";
-  prevBtn.disabled = viewIndex === 0 || isAnimating;
-  nextBtn.disabled = viewIndex >= views.length - 1 || isAnimating;
+
+  // Met à jour l'état des flèches latérales
+  sidePrev.disabled = isAnimating || viewIndex === 0;
+  sideNext.disabled = isAnimating || viewIndex >= views.length - 1;
 }
 
 /* ============================================================
@@ -625,8 +627,10 @@ function animateRAF(duration, onUpdate, onDone) {
 function animateTurn(direction, onComplete) {
   if (isAnimating) return;
   isAnimating = true;
-  prevBtn.disabled = true;
-  nextBtn.disabled = true;
+
+  // Verrouille les flèches pendant l'animation
+  sidePrev.disabled = true;
+  sideNext.disabled = true;
 
   const currentView = views[viewIndex] || {};
   const nextIndex = direction === "next" ? viewIndex + 1 : viewIndex - 1;
@@ -956,12 +960,17 @@ pedestal.addEventListener('wheel', (e) => {
 /* ============================================================
    12) ÉVÉNEMENTS PAGE
    ============================================================ */
-prevBtn.addEventListener("click", prevPage);
-nextBtn.addEventListener("click", nextPage);
+// Flèches latérales
+sidePrev.addEventListener("click", prevPage);
+sideNext.addEventListener("click", nextPage);
+
+// Clavier
 document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") nextPage();
   if (e.key === "ArrowLeft")  prevPage();
 });
+
+// Gestes tactiles
 let touchStartX = 0;
 bookEl.addEventListener("touchstart", (e) => {
   if (e.touches && e.touches.length === 1) touchStartX = e.touches[0].clientX;
@@ -974,6 +983,10 @@ bookEl.addEventListener("touchend", (e) => {
   else if (dx > 40) prevPage();
   touchStartX = 0;
 }, { passive: true });
+
+// Clic direct sur les pages
+leftEl.addEventListener("click",()=>{ if(!isAnimating && viewIndex>0) prevPage(); });
+rightEl.addEventListener("click",()=>{ if(!isAnimating && viewIndex<views.length-1) nextPage(); });
 
 /* ============================================================
    13) INIT
